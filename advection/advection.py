@@ -188,44 +188,60 @@ class Simulation:
         al = g.scratch_array()
         ar = g.scratch_array()
 
+        al_co_moving = g.scratch_array()
+        ar_co_moving = g.scratch_array()
+
         i = g.ilo
         while i <= g.ihi+1:
             
             if (self.invariant_hydro == 1):
-                vf = u
+                vfl = u
+                vfr = u
             else:
-                vf = 0.0
+                vfl = 0.0
+                vfr = 0.0
 
             # left state on the current interface comes from zone i-1
-            al[i] = g.a[i-1] + 0.5*g.dx*(1.0 - (u-vf)*dt/g.dx)*slope[i-1]
+            al[i] = g.a[i-1] + 0.5*g.dx*(1.0 - (u-vfl)*dt/g.dx)*slope[i-1]
+
+            al_co_moving[i] = g.a[i-1] + 0.5*g.dx*(1.0 - vfl*dt/g.dx)*slope[i-1]
 
             # right state on the current interface comes from zone i
-            ar[i] = g.a[i] - 0.5*g.dx*(1.0 + (u-vf)*dt/g.dx)*slope[i]
+            ar[i] = g.a[i] - 0.5*g.dx*(1.0 + (u-vfr)*dt/g.dx)*slope[i]
+
+            ar_co_moving[i] = g.a[i] - 0.5*g.dx*(1.0 + vfr*dt/g.dx)*slope[i]
 
             i += 1
 
-        return al, ar
+        return al, ar, al_co_moving, ar_co_moving
 
 
-    def riemann(self, al, ar):
+    def riemann(self, al, ar, al_co_moving, ar_co_moving):
         """ 
         Riemann problem for advection -- this is simply upwinding,
         but we return the flux 
         """
 
         if (self.invariant_hydro == 1):
+            co_moving_flux = 0.0
             ul = 0.0
             ur = 0.0
             vf = self.u
+            if (vf > 0.0):
+                lab_flux = vf*al_co_moving
+            else:
+                lab_flux = vf*ar_co_moving
         else:
             ul = self.u
             ur = self.u
             vf = 0.0
+            if (self.u > 0.0):
+                co_moving_flux = ul*al
+            else:
+                co_moving_flux = ur*ar
+            lab_flux = 0.0
 
-        if self.u > 0.0:
-            return (vf+ul)*al
-        else:
-            return (vf+ur)*ar
+        return (co_moving_flux + lab_flux)
 
 
     def update(self, dt, flux):
@@ -262,10 +278,10 @@ class Simulation:
                 dt = tmax - self.t
 
             # get the interface states
-            al, ar = self.states(dt)
+            al, ar, al_co_moving, ar_co_moving = self.states(dt)
 
             # solve the Riemann problem at all interfaces
-            flux = self.riemann(al, ar)
+            flux = self.riemann(al, ar, al_co_moving, ar_co_moving)
         
             # do the conservative update
             anew = self.update(dt, flux)
