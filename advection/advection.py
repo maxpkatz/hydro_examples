@@ -98,6 +98,7 @@ class Simulation:
         self.u = u   # the constant advective velocity
         self.C = C   # CFL number
         self.slope_type = slope_type
+        self.invariant_hydro = 1
 
 
     def init_cond(self, type="tophat"):
@@ -189,12 +190,17 @@ class Simulation:
 
         i = g.ilo
         while i <= g.ihi+1:
+            
+            if (self.invariant_hydro == 1):
+                vf = u
+            else:
+                vf = 0.0
 
             # left state on the current interface comes from zone i-1
-            al[i] = g.a[i-1] + 0.5*g.dx*(1.0 - u*dt/g.dx)*slope[i-1]
+            al[i] = g.a[i-1] + 0.5*g.dx*(1.0 - (u-vf)*dt/g.dx)*slope[i-1]
 
             # right state on the current interface comes from zone i
-            ar[i] = g.a[i] - 0.5*g.dx*(1.0 + u*dt/g.dx)*slope[i]
+            ar[i] = g.a[i] - 0.5*g.dx*(1.0 + (u-vf)*dt/g.dx)*slope[i]
 
             i += 1
 
@@ -207,10 +213,19 @@ class Simulation:
         but we return the flux 
         """
 
-        if self.u > 0.0:
-            return self.u*al
+        if (self.invariant_hydro == 1):
+            ul = 0.0
+            ur = 0.0
+            vf = self.u
         else:
-            return self.u*ar
+            ul = self.u
+            ur = self.u
+            vf = 0.0
+
+        if self.u > 0.0:
+            return (vf+ul)*al
+        else:
+            return (vf+ur)*ar
 
 
     def update(self, dt, flux):
